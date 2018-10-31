@@ -3,7 +3,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-#include <sched.h>
+#include <rtai_sched.h>
 #include <rtai_shm.h>
 #include <rtai_lxrt.h>
 #include <pthread.h>
@@ -134,22 +134,6 @@ int main()
 		}
 
 	}
-
-	/*
-
-	statetype reg;
-
-	regul_init(&reg);
-
-	int i;
-	for (i = 0; i < 100; i++) {
-		double e = 1;
-		regul_out(&reg, e, 85.88);
-		printf("Value = %f\n", reg.u);
-		regul_update(&reg, e, -73.42, -0.4378);
-	}
-
-	*/
 
 	return 0;
 }
