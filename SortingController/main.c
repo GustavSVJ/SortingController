@@ -3,7 +3,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-#include <rtai_sched.h>
+#include <sched.h>
 #include <rtai_shm.h>
 #include <rtai_lxrt.h>
 #include <pthread.h>
@@ -11,20 +11,24 @@
 
 char stopflag = 0;
 
-static double b0 = 85.88;
-static double b1 = -73.42;
-static double a1 = -0.4378;
+static double shute_b0 = 85.88;
+static double shute_b1 = -73.42;
+static double shute_a1 = -0.4378;
+
+static double belt_b0 = 91.58;
+static double belt_b1 = -90.66;
+static double belt_a1 = -1;
 
 /* Read a string, and return a pointer to it.  Returns NULL on EOF.
- * Taken from the readline manual (info readline).
- */
+* Taken from the readline manual (info readline).
+*/
 char *rl_gets(char *prompt)
 {
 	/* A static variable for holding the line. */
 	static char *line_read = (char *)NULL;
 
 	/* If the buffer has already been allocated, return the memory
-	   to the free pool. */
+	to the free pool. */
 	if (line_read) {
 		free(line_read);
 		line_read = (char *)NULL;
@@ -47,43 +51,71 @@ void *RegulatorThread(void* stuff) {
 
 	RT_TASK *task = rt_task_init(nam2num("h1901"), 0, 0, 0);
 
-	
+
 	rt_task_make_periodic_relative_ns(task, 0, 5000000);
-	
-	statetype reg;
-	regul_init(&reg);
+
+	statetype shute_reg, belt_reg;
+	regul_init(&shute_reg);
+	regul_init(&belt_reg);
 
 	comedi_t * hw = comedi_open("/dev/comedi2");
 	int i = 0;
 
 	while (stopflag == 0) {
+		//Shute regulator
 		unsigned int data;
-		unsigned int ref = 3200;
+		unsigned int shute_ref = 3200;
 
 		comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 
-		int e = (ref - data);
+		int e = (shute_ref - data);
 
-		regul_out(&reg, e, b0);
+		regul_out(&shute_reg, e, shute_b0);
 
-		regul_update(&reg, e, b1, a1);
+		regul_update(&shute_reg, e, shute_b1, shute_a1);
 
-		if (reg.u > 2045) {
+		if (shute_reg.u > 2045) {
 			data = 4095;
 		}
-		else if (reg.u < -2045) {
+		else if (shute_reg.u < -2045) {
 			data = 0;
 		}
 		else {
-			data = (unsigned int)reg.u + 2048;
+			data = (unsigned int)shute_reg.u + 2048;
 		}
 
 		if (i > 200) {
 			i = 0;
-			printf("The error is %d and the output is %d and the controller is %f\n", e, data, reg.u);
+			//printf("The error is %d and the output is %d and the controller is %f\n", e, data, shute_reg.u);
 		}
-		
+
 		comedi_data_write(hw, 1, 0, 0, AREF_GROUND, data);
+
+		//Belt Regulator
+		comedi_data_read_delayed(hw, 0, 1, 0, AREF_DIFF, &data, 50000);
+		double belt_ref = 2300;
+		int inputData = data;
+		e = (belt_ref - data);
+		regul_out(&belt_reg, e, belt_b0);
+
+		regul_update(&belt_reg, e, belt_b1, belt_a1);
+
+		if (belt_reg.u > 2045) {
+			data = 4095;
+		}
+		else if (belt_reg.u < -2045) {
+			data = 0;
+		}
+		else {
+			data = (unsigned int)belt_reg.u + 2048;
+		}
+
+		if (i > 200) {
+			i = 0;
+			printf("The error is %d and the output is %d and the controller is %f and the input is %d\n", e, data, belt_reg.u, inputData);
+		}
+
+		comedi_data_write(hw, 1, 1, 0, AREF_GROUND, data);
 
 		rt_task_wait_period();
 		i++;
@@ -134,6 +166,22 @@ int main()
 		}
 
 	}
+
+	/*
+
+	statetype reg;
+
+	regul_init(&reg);
+
+	int i;
+	for (i = 0; i < 100; i++) {
+	double e = 1;
+	regul_out(&reg, e, 85.88);
+	printf("Value = %f\n", reg.u);
+	regul_update(&reg, e, -73.42, -0.4378);
+	}
+
+	*/
 
 	return 0;
 }
