@@ -15,8 +15,8 @@ static double shute_b0 = 85.88;
 static double shute_b1 = -73.42;
 static double shute_a1 = -0.4378;
 
-static double belt_b0 = 91.58;
-static double belt_b1 = -90.66;
+static double belt_b0 = 0.9606;
+static double belt_b1 = -0.9368;
 static double belt_a1 = -1;
 
 /* Read a string, and return a pointer to it.  Returns NULL on EOF.
@@ -45,6 +45,12 @@ char *rl_gets(char *prompt)
 
 void *RegulatorThread(void* stuff) {
 
+	FILE *fp;
+
+	fp = fopen("LogOut.txt", "w+");
+
+	fprintf(fp, "Time; A0in; A0out; A1in; A1out;\n");
+
 	mlockall(MCL_CURRENT | MCL_FUTURE);
 	const struct sched_param params = { .sched_priority = sched_get_priority_max(SCHED_FIFO) };
 	sched_setscheduler(0, SCHED_FIFO, &params);
@@ -61,13 +67,17 @@ void *RegulatorThread(void* stuff) {
 	comedi_t * hw = comedi_open("/dev/comedi2");
 	int i = 0;
 
+	long long int timeOld = rt_get_time_ns();
+
 	while (stopflag == 0) {
+		long long int timeRelative = rt_get_time_ns() - timeOld;
+		double time = timeRelative / 1000000000.0;
 		//Shute regulator
 		unsigned int data;
 		unsigned int shute_ref = 3200;
 
 		comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
-
+		fprintf(fp, "%f;%d;",time, data);
 		int e = (shute_ref - data);
 
 		regul_out(&shute_reg, e, shute_b0);
@@ -85,17 +95,18 @@ void *RegulatorThread(void* stuff) {
 		}
 
 		if (i > 200) {
-			i = 0;
+			//i = 0;
 			//printf("The error is %d and the output is %d and the controller is %f\n", e, data, shute_reg.u);
 		}
 
 		comedi_data_write(hw, 1, 0, 0, AREF_GROUND, data);
-
+		fprintf(fp, "%d;", data);
 		//Belt Regulator
 		comedi_data_read_delayed(hw, 0, 1, 0, AREF_DIFF, &data, 50000);
-		double belt_ref = 2300;
-		int inputData = data;
-		e = (belt_ref - data);
+		double belt_ref = 175;
+		int inputData = data - 2048;
+		e = (belt_ref - inputData);
+		fprintf(fp, "%d;", data);
 		regul_out(&belt_reg, e, belt_b0);
 
 		regul_update(&belt_reg, e, belt_b1, belt_a1);
@@ -103,8 +114,8 @@ void *RegulatorThread(void* stuff) {
 		if (belt_reg.u > 2045) {
 			data = 4095;
 		}
-		else if (belt_reg.u < -2045) {
-			data = 0;
+		else if (belt_reg.u < 0) {
+			data = 2048;
 		}
 		else {
 			data = (unsigned int)belt_reg.u + 2048;
@@ -116,11 +127,14 @@ void *RegulatorThread(void* stuff) {
 		}
 
 		comedi_data_write(hw, 1, 1, 0, AREF_GROUND, data);
-
+		fprintf(fp, "%d;\n", data);
 		rt_task_wait_period();
 		i++;
 	}
 
+	comedi_data_write(hw, 1, 1, 0, AREF_GROUND, 2048);
+	comedi_data_write(hw, 1, 0, 0, AREF_GROUND, 2048);
+	fclose(fp);
 	rt_task_delete(task);
 
 	return NULL;
