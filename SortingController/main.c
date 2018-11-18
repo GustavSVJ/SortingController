@@ -16,9 +16,14 @@ static double shute_b0 = 85.88;
 static double shute_b1 = -73.42;
 static double shute_a1 = -0.4378;
 
-static double belt_b0 = 0.9606;
-static double belt_b1 = -0.9368;
+static double belt_b0 = 1.261;
+static double belt_b1 = -1.249;
 static double belt_a1 = -1;
+
+unsigned int shute_ref = 3200;
+unsigned int belt_ref = 175;
+double belt_ref_ms = 0;
+
 
 /* Read a string, and return a pointer to it.  Returns NULL on EOF.
 * Taken from the readline manual (info readline).
@@ -47,8 +52,10 @@ char *rl_gets(char *prompt)
 void *RegulatorThread(void* stuff) {
 
 	FILE *fp;
+	FILE *fp2;
 
 	fp = fopen("LogOut.txt", "w+");
+	fp2 = fopen("DetectorLog.txt", "w+");
 
 	fprintf(fp, "Time; A0in; A0out; A1in; A1out;\n");
 
@@ -69,14 +76,15 @@ void *RegulatorThread(void* stuff) {
 	int j = 0;
 
 	/*Length detection variables*/
+#define beltSpeedAverage 200
 	unsigned int detectorCounter = 0;
 	unsigned int beltSpeedCounter = 0;
-	unsigned int beltSpeed[10];
-	
+	unsigned int beltSpeed[beltSpeedAverage];
+
 	/*End of length detection variables*/
 
 	long long int timeOld = rt_get_time_ns();
-	
+
 
 	while (stopflag == 0) {
 
@@ -84,28 +92,48 @@ void *RegulatorThread(void* stuff) {
 
 		unsigned int data;
 		comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &data, 50000);
+		
+		long long int timeRelative = rt_get_time_ns() - timeOld;
+		double time = timeRelative / 1000000000.0;
+		fprintf(fp2, "%lf; %d\n", time, data);
 
 		if (data > 3000) {
+
 			detectorCounter++;
 		}
-		else if(detectorCounter != 0) {
+		else if (detectorCounter != 0) {
 			printf("The counter was %d\n", detectorCounter);
 			double avgBeltSpeed = 0;
 			int i = 0;
-			for (i = 0; i < 10; i++) {
+			for (i = 0; i < beltSpeedAverage; i++) {
 				avgBeltSpeed += beltSpeed[i];
 			}
-			
 
-			avgBeltSpeed = (((avgBeltSpeed / 10) / 4096) * 20) - 10;
-			
+			avgBeltSpeed = (((avgBeltSpeed / beltSpeedAverage) / 4096) * 20) - 10;
+
 			avgBeltSpeed = avgBeltSpeed * 384.6153846 * 0.1047197551 * 0.1666666667 * 0.036;
-			
-			double objectLength = detectorCounter * 0.0025 * avgBeltSpeed * 100;
 
-			printf("The average belt speed was %f and the object was %f cm\n", avgBeltSpeed, objectLength);
+			double objectLength = detectorCounter * 0.0025 * belt_ref_ms * 100;
+
+			printf("The average belt speed was %f and the object was %f cm\n", belt_ref_ms, objectLength);
 
 			detectorCounter = 0;
+
+			if (4.5 < objectLength && objectLength < 5.5) {
+				printf("The stick was 5 centimeters long!\n");
+				shute_ref = 3600;
+			}
+			else if(7 < objectLength && objectLength < 8) {
+				printf("The stick was 7.5 centimeters long!\n");
+				shute_ref = 3250;
+			}
+			else if (9.5 < objectLength && objectLength < 10.5) {
+				printf("The stick was 10 centimeters long!\n");
+				shute_ref = 3000;
+			}
+			else {
+				printf("Unknown length!\n");
+			}
 		}
 
 		/*End of length detection*/
@@ -113,11 +141,9 @@ void *RegulatorThread(void* stuff) {
 		if (j) {
 			j = 0;
 
-			long long int timeRelative = rt_get_time_ns() - timeOld;
-			double time = timeRelative / 1000000000.0;
 			//Shute regulator
 			unsigned int data;
-			unsigned int shute_ref = 3200;
+
 
 			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 			fprintf(fp, "%f;%d;", time, data);
@@ -141,12 +167,12 @@ void *RegulatorThread(void* stuff) {
 			fprintf(fp, "%d;", data);
 			//Belt Regulator
 			comedi_data_read_delayed(hw, 0, 1, 0, AREF_DIFF, &data, 50000);
-			double belt_ref = 175;
+
 			int inputData = data - 2048;
 			e = (belt_ref - inputData);
 			fprintf(fp, "%d;", data);
 			beltSpeed[beltSpeedCounter] = data;
-			if (beltSpeedCounter < 9) {
+			if (beltSpeedCounter < beltSpeedAverage - 1) {
 				beltSpeedCounter++;
 			}
 			else {
@@ -168,6 +194,7 @@ void *RegulatorThread(void* stuff) {
 			}
 
 			comedi_data_write(hw, 1, 1, 0, AREF_GROUND, data);
+
 			fprintf(fp, "%d;\n", data);
 		}
 		else {
@@ -181,6 +208,7 @@ void *RegulatorThread(void* stuff) {
 	comedi_data_write(hw, 1, 0, 0, AREF_GROUND, 2048);
 	comedi_close(hw);
 	fclose(fp);
+	fclose(fp2);
 	rt_task_delete(task);
 
 	return NULL;
@@ -235,23 +263,24 @@ int main()
 			comedi_close(hw);
 		}
 
+		else if (strcmp(input, "beltRef") == 0) {
+			printf("Type a new reference speed for the belt in [m/s]\n");
+			scanf("%lf", &belt_ref_ms);
+			printf("The typed reference was %lf\n", belt_ref_ms);
+
+			belt_ref = round(204.8 * 4.138028520 * belt_ref_ms);
+
+			printf("Resulting in a reference of %d\n", belt_ref);
+
+		}
+
+		else if (strcmp(input, "shuteRef") == 0) {
+			printf("Type a new reference for the shute\n");
+			scanf("%d", &shute_ref);
+			printf("The typed ref was %d\n", shute_ref);
+		}
+
 	}
-
-	/*
-
-	statetype reg;
-
-	regul_init(&reg);
-
-	int i;
-	for (i = 0; i < 100; i++) {
-	double e = 1;
-	regul_out(&reg, e, 85.88);
-	printf("Value = %f\n", reg.u);
-	regul_update(&reg, e, -73.42, -0.4378);
-	}
-
-	*/
 
 	return 0;
 }
