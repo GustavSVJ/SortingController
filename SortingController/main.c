@@ -13,18 +13,18 @@
 char stopflag = 0;
 
 static short shute_b0 = 21985;
-static short shute_b0_exp = 128;
+static short shute_b0_exp = 7;
 static short shute_b1 = -18796;
-static short shute_b1_exp = 128;
+static short shute_b1_exp = 7;
 static short shute_a1 = -14346;
-static short shute_a1_exp = 1;
+static short shute_a1_exp = 0;
 
 static short belt_b0 = 32735;
-static short belt_b0_exp = 4;
+static short belt_b0_exp = 2;
 static short belt_b1 = -30622;
-static short belt_b1_exp = 4;
+static short belt_b1_exp = 2;
 static short belt_a1 = -32768;
-static short belt_a1_exp = 1;
+static short belt_a1_exp = 0;
 
 unsigned int shute_ref = 3200;
 unsigned int belt_ref = 169;
