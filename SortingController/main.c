@@ -12,13 +12,19 @@
 
 char stopflag = 0;
 
-static double shute_b0 = 85.88;
-static double shute_b1 = -73.42;
-static double shute_a1 = -0.4378;
+static short shute_b0 = 21985;
+static short shute_b0_exp = 128;
+static short shute_b1 = -18796;
+static short shute_b1_exp = 128;
+static short shute_a1 = -14346;
+static short shute_a1_exp = 1;
 
-static double belt_b0 = 3.996;
-static double belt_b1 = -3.738;
-static double belt_a1 = -1;
+static short belt_b0 = 32735;
+static short belt_b0_exp = 4;
+static short belt_b1 = -30622;
+static short belt_b1_exp = 4;
+static short belt_a1 = -32768;
+static short belt_a1_exp = 1;
 
 unsigned int shute_ref = 3200;
 unsigned int belt_ref = 169;
@@ -75,8 +81,16 @@ void *RegulatorThread(void* stuff) {
 	comedi_t * hw = comedi_open("/dev/comedi2");
 
 	comedi_data_write(hw, 1, 1, 0, AREF_GROUND, 2048);
-	unsigned int beltOffset;
-	comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &beltOffset, 50000);
+	unsigned short beltOffset;
+	double beltOffsetAverage = 0;
+	int i = 0;
+	for (; i < 25; i++) {
+		comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &beltOffset, 50000);
+		beltOffsetAverage += beltOffset;
+	}
+
+	beltOffset = (unsigned short)beltOffsetAverage / 25;
+	
 	printf("The belt value was %d when the belt was stopped\n", beltOffset);
 
 	int j = 0;
@@ -158,11 +172,11 @@ void *RegulatorThread(void* stuff) {
 
 			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 			fprintf(fp, "%f;%d;", time, data);
-			int e = (shute_ref - data);
+			short e = (shute_ref - data);
 
-			regul_out(&shute_reg, e, shute_b0);
+			regul_out(&shute_reg, e, shute_b0, shute_b0_exp);
 
-			regul_update(&shute_reg, e, shute_b1, shute_a1);
+			regul_update(&shute_reg, e, shute_b1, shute_a1, shute_b1_exp, shute_a1_exp);
 
 			if (shute_reg.u > 2045) {
 				data = 4095;
@@ -179,7 +193,7 @@ void *RegulatorThread(void* stuff) {
 			//Belt Regulator
 			comedi_data_read_delayed(hw, 0, 1, 0, AREF_DIFF, &data, 50000);
 
-			int inputData = data - beltOffset;
+			short inputData = data - beltOffset;
 			e = (belt_ref - inputData);
 			fprintf(fp, "%d;", data);
 			beltSpeed[beltSpeedCounter] = data;
@@ -190,9 +204,9 @@ void *RegulatorThread(void* stuff) {
 				beltSpeedCounter = 0;
 			}
 
-			regul_out(&belt_reg, e, belt_b0);
+			regul_out(&belt_reg, e, belt_b0, belt_b0_exp);
 
-			regul_update(&belt_reg, e, belt_b1, belt_a1);
+			regul_update(&belt_reg, e, belt_b1, belt_a1, belt_b1_exp, belt_a1_exp);
 
 			if (belt_reg.u > 2045) {
 				data = 4095;

@@ -75,10 +75,12 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
+    <ClCompile Include="fixpoint.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="regulator.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="fixpoint.h" />
     <ClInclude Include="regulator.h" />
   </ItemGroup>
   <ItemDefinitionGroup />
