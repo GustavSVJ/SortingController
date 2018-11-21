@@ -16,13 +16,13 @@ static double shute_b0 = 85.88;
 static double shute_b1 = -73.42;
 static double shute_a1 = -0.4378;
 
-static double belt_b0 = 1.261;
-static double belt_b1 = -1.249;
+static double belt_b0 = 3.996;
+static double belt_b1 = -3.738;
 static double belt_a1 = -1;
 
 unsigned int shute_ref = 3200;
-unsigned int belt_ref = 175;
-double belt_ref_ms = 0;
+unsigned int belt_ref = 169;
+double belt_ref_ms = 0.2;
 
 
 /* Read a string, and return a pointer to it.  Returns NULL on EOF.
@@ -66,13 +66,19 @@ void *RegulatorThread(void* stuff) {
 	RT_TASK *task = rt_task_init(nam2num("h1901"), 0, 0, 0);
 
 
-	rt_task_make_periodic_relative_ns(task, 0, 2500000);
+	rt_task_make_periodic_relative_ns(task, 0, 2000000);
 
 	statetype shute_reg, belt_reg;
 	regul_init(&shute_reg);
 	regul_init(&belt_reg);
 
 	comedi_t * hw = comedi_open("/dev/comedi2");
+
+	comedi_data_write(hw, 1, 1, 0, AREF_GROUND, 2048);
+	unsigned int beltOffset;
+	comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &beltOffset, 50000);
+	printf("The belt value was %d when the belt was stopped\n", beltOffset);
+
 	int j = 0;
 
 	/*Length detection variables*/
@@ -88,22 +94,25 @@ void *RegulatorThread(void* stuff) {
 
 	while (stopflag == 0) {
 
+		long long int timeRelative = rt_get_time_ns() - timeOld;
+		double time = timeRelative;
+		fprintf(fp2, "%lf\n", time);
+
 		/*Length detection*/
 
 		unsigned int data;
-		comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &data, 50000);
-		
-		long long int timeRelative = rt_get_time_ns() - timeOld;
-		double time = timeRelative / 1000000000.0;
-		fprintf(fp2, "%lf; %d\n", time, data);
-
-		if (data > 3000) {
+		comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &data, 50000); //read sensor into data if there is a stick (value above 3000) or not (0)
+	
+		if (data > 3000) { //count upwards while sensing a stick
 
 			detectorCounter++;
 		}
-		else if (detectorCounter != 0) {
+		else if (detectorCounter != 0) { // calculate length in objectLength as soon as the stick has passed the sensor
 			printf("The counter was %d\n", detectorCounter);
+			
+			/*
 			double avgBeltSpeed = 0;
+			
 			int i = 0;
 			for (i = 0; i < beltSpeedAverage; i++) {
 				avgBeltSpeed += beltSpeed[i];
@@ -113,21 +122,23 @@ void *RegulatorThread(void* stuff) {
 
 			avgBeltSpeed = avgBeltSpeed * 384.6153846 * 0.1047197551 * 0.1666666667 * 0.036;
 
-			double objectLength = detectorCounter * 0.0025 * belt_ref_ms * 100;
+			*/
 
-			printf("The average belt speed was %f and the object was %f cm\n", belt_ref_ms, objectLength);
+			double objectLength = detectorCounter * 0.002 * belt_ref_ms * 100;
+
+			printf("The average belt speed was %f and the object was %f cm and the counter was %d\n", belt_ref_ms, objectLength, detectorCounter);
 
 			detectorCounter = 0;
 
-			if (4.5 < objectLength && objectLength < 5.5) {
+			if (3.75 < objectLength && objectLength < 6.25) {
 				printf("The stick was 5 centimeters long!\n");
 				shute_ref = 3600;
 			}
-			else if(7 < objectLength && objectLength < 8) {
+			else if(6.25 < objectLength && objectLength < 8.75) {
 				printf("The stick was 7.5 centimeters long!\n");
 				shute_ref = 3250;
 			}
-			else if (9.5 < objectLength && objectLength < 10.5) {
+			else if (8.75 < objectLength && objectLength < 11.25) {
 				printf("The stick was 10 centimeters long!\n");
 				shute_ref = 3000;
 			}
@@ -168,7 +179,7 @@ void *RegulatorThread(void* stuff) {
 			//Belt Regulator
 			comedi_data_read_delayed(hw, 0, 1, 0, AREF_DIFF, &data, 50000);
 
-			int inputData = data - 2048;
+			int inputData = data - beltOffset;
 			e = (belt_ref - inputData);
 			fprintf(fp, "%d;", data);
 			beltSpeed[beltSpeedCounter] = data;
@@ -257,7 +268,7 @@ int main()
 			comedi_t * hw = comedi_open("/dev/comedi2");
 
 			unsigned int data;
-			comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &data, 50000);
+			comedi_data_read_delayed(hw, 0, 1, 0, AREF_DIFF, &data, 50000);
 			printf("The reading was %d\n", data);
 
 			comedi_close(hw);
