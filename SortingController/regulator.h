@@ -3,7 +3,7 @@
 
 typedef struct {
 	/*controller state variables should be declared here*/
-	short dummy, u;
+	short dummy, u, x;
 }statetype;
 
 void regul_init(statetype *p);

@@ -14,21 +14,22 @@ char stopflag = 0;
 
 static short shute_b0 = 21985;
 static short shute_b0_exp = 7;
-static short shute_b1 = -18796;
-static short shute_b1_exp = 7;
+static short shute_b1 = -28014;
+static short shute_b1_exp = 0;
 static short shute_a1 = -14346;
 static short shute_a1_exp = 0;
 
 static short belt_b0 = 32735;
 static short belt_b0_exp = 2;
-static short belt_b1 = -30622;
-static short belt_b1_exp = 2;
+static short belt_b1 = -30652;
+static short belt_b1_exp = 0;
 static short belt_a1 = -32768;
 static short belt_a1_exp = 0;
 
 unsigned int shute_ref = 3200;
 unsigned int belt_ref = 169;
 double belt_ref_ms = 0.2;
+
 
 
 /* Read a string, and return a pointer to it.  Returns NULL on EOF.
@@ -81,7 +82,7 @@ void *RegulatorThread(void* stuff) {
 	comedi_t * hw = comedi_open("/dev/comedi2");
 
 	comedi_data_write(hw, 1, 1, 0, AREF_GROUND, 2048);
-	unsigned short beltOffset;
+	unsigned int beltOffset;
 	double beltOffsetAverage = 0;
 	int i = 0;
 	for (; i < 25; i++) {
@@ -123,20 +124,6 @@ void *RegulatorThread(void* stuff) {
 		}
 		else if (detectorCounter != 0) { // calculate length in objectLength as soon as the stick has passed the sensor
 			printf("The counter was %d\n", detectorCounter);
-			
-			/*
-			double avgBeltSpeed = 0;
-			
-			int i = 0;
-			for (i = 0; i < beltSpeedAverage; i++) {
-				avgBeltSpeed += beltSpeed[i];
-			}
-
-			avgBeltSpeed = (((avgBeltSpeed / beltSpeedAverage) / 4096) * 20) - 10;
-
-			avgBeltSpeed = avgBeltSpeed * 384.6153846 * 0.1047197551 * 0.1666666667 * 0.036;
-
-			*/
 
 			double objectLength = detectorCounter * 0.002 * belt_ref_ms * 100;
 
@@ -168,7 +155,6 @@ void *RegulatorThread(void* stuff) {
 
 			//Shute regulator
 			unsigned int data;
-
 
 			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 			fprintf(fp, "%f;%d;", time, data);
