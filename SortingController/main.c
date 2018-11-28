@@ -26,11 +26,21 @@ static short belt_b1_exp = 0;
 static short belt_a1 = -32768;
 static short belt_a1_exp = 0;
 
+#define SHUTE_REF_DELAY_LENGTH 1000
 unsigned int shute_ref = 3200;
+unsigned int shute_ref_delay[1000];
+unsigned int shute_ref_delay_counter = 0;
 unsigned int belt_ref = 169;
 double belt_ref_ms = 0.2;
 
+char shortSticks = 0; 
+char mediumSticks = 0; 
+char longSticks = 0; 
+char stupidSticks = 0;
 
+int firstBoxRef = 3000;
+int secondBoxRef = 3250;
+int thirdBoxRef = 3600;
 
 /* Read a string, and return a pointer to it.  Returns NULL on EOF.
 * Taken from the readline manual (info readline).
@@ -94,6 +104,11 @@ void *RegulatorThread(void* stuff) {
 	
 	printf("The belt value was %d when the belt was stopped\n", beltOffset);
 
+	for (i = 0; i < SHUTE_REF_DELAY_LENGTH; i++) {
+		shute_ref_delay[i] = 3200;
+	}
+
+
 	int j = 0;
 
 	/*Length detection variables*/
@@ -107,6 +122,7 @@ void *RegulatorThread(void* stuff) {
 	long long int timeOld = rt_get_time_ns();
 
 
+
 	while (stopflag == 0) {
 
 		long long int timeRelative = rt_get_time_ns() - timeOld;
@@ -114,8 +130,9 @@ void *RegulatorThread(void* stuff) {
 		fprintf(fp2, "%lf\n", time);
 
 		/*Length detection*/
-
+		
 		unsigned int data;
+
 		comedi_data_read_delayed(hw, 0, 2, 0, AREF_DIFF, &data, 50000); //read sensor into data if there is a stick (value above 3000) or not (0)
 	
 		if (data > 3000) { //count upwards while sensing a stick
@@ -127,38 +144,58 @@ void *RegulatorThread(void* stuff) {
 
 			double objectLength = detectorCounter * 0.002 * belt_ref_ms * 100;
 
-			printf("The average belt speed was %f and the object was %f cm and the counter was %d\n", belt_ref_ms, objectLength, detectorCounter);
-
 			detectorCounter = 0;
 
 			if (3.75 < objectLength && objectLength < 6.25) {
 				printf("The stick was 5 centimeters long!\n");
-				shute_ref = 3600;
+				shortSticks++;
+				shute_ref = secondBoxRef;
 			}
 			else if(6.25 < objectLength && objectLength < 8.75) {
 				printf("The stick was 7.5 centimeters long!\n");
-				shute_ref = 3250;
+				mediumSticks++;
+				shute_ref = firstBoxRef;
 			}
 			else if (8.75 < objectLength && objectLength < 11.25) {
 				printf("The stick was 10 centimeters long!\n");
-				shute_ref = 3000;
+				longSticks++;
+				shute_ref = thirdBoxRef;
 			}
 			else {
 				printf("Unknown length!\n");
+				stupidSticks++;
 			}
 		}
+		
+		
+		
 
 		/*End of length detection*/
 
 		if (j) {
 			j = 0;
 
+			int shute_ref_offset = (0.35 / belt_ref_ms) / 0.004;
+
+			if (shute_ref_offset + shute_ref_delay_counter < SHUTE_REF_DELAY_LENGTH) {
+				shute_ref_delay[shute_ref_offset + shute_ref_delay_counter] = shute_ref;
+			}
+			else {
+				shute_ref_delay[shute_ref_offset + shute_ref_delay_counter - SHUTE_REF_DELAY_LENGTH] = shute_ref;
+			}
+
+			shute_ref_delay_counter++;
+
+			if (shute_ref_delay_counter >= SHUTE_REF_DELAY_LENGTH) {
+				shute_ref_delay_counter = 0;
+			}
+
 			//Shute regulator
 			unsigned int data;
 
 			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 			fprintf(fp, "%f;%d;", time, data);
-			short e = (shute_ref - data);
+			short e = (shute_ref_delay[shute_ref_delay_counter] - data);
 
 			regul_out(&shute_reg, e, shute_b0, shute_b0_exp);
 
@@ -249,6 +286,10 @@ int main()
 			}
 			else {
 				controllerStatus = 1;
+				shortSticks = 0; 
+				mediumSticks = 0; 
+				longSticks = 0;
+				stupidSticks = 0;
 				puts("Write stop to exit!\n");
 			}
 		}
@@ -258,6 +299,7 @@ int main()
 			pthread_join(thread, NULL);
 			controllerStatus = 0;
 			puts("Controller stopped!\n");
+			printf("A total of %d sticks were processed. %d short, %d medium, %d long and %d unknown sticks were processed.", shortSticks + mediumSticks + longSticks + stupidSticks, shortSticks, mediumSticks, longSticks, stupidSticks);
 		}
 
 		else if ((strcmp(input, "quit") == 0) || (strcmp(input, "exit") == 0)) {
@@ -286,9 +328,29 @@ int main()
 		}
 
 		else if (strcmp(input, "shuteRef") == 0) {
-			printf("Type a new reference for the shute\n");
-			scanf("%d", &shute_ref);
-			printf("The typed ref was %d\n", shute_ref);
+			comedi_t * hw = comedi_open("/dev/comedi2");
+
+			unsigned int data;
+
+			printf("Set the shute in the position for the first box and press enter...\n");
+			getchar();
+			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
+			firstBoxRef = data;
+
+			printf("A value of %d was saved!", data);
+			printf("Set the shute in the position for the second box and press enter...\n");
+			getchar();
+			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
+			secondBoxRef = data;
+
+			printf("A value of %d was saved!", data);
+			printf("Set the shute in the position for the third box and press enter...\n");
+			getchar();
+			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
+			thirdBoxRef = data;
+
+			printf("A value of %d was saved!", data);
+			printf("New calibration was saved\n");
 		}
 
 	}
