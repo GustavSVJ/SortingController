@@ -299,7 +299,7 @@ int main()
 			pthread_join(thread, NULL);
 			controllerStatus = 0;
 			puts("Controller stopped!\n");
-			printf("A total of %d sticks were processed. %d short, %d medium, %d long and %d unknown sticks were processed.", shortSticks + mediumSticks + longSticks + stupidSticks, shortSticks, mediumSticks, longSticks, stupidSticks);
+			printf("A total of %d sticks were processed. %d short, %d medium, %d long and %d unknown sticks were processed.\n", shortSticks + mediumSticks + longSticks + stupidSticks, shortSticks, mediumSticks, longSticks, stupidSticks);
 		}
 
 		else if ((strcmp(input, "quit") == 0) || (strcmp(input, "exit") == 0)) {
