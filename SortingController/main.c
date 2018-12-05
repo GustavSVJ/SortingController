@@ -140,7 +140,6 @@ void *RegulatorThread(void* stuff) {
 			detectorCounter++;
 		}
 		else if (detectorCounter != 0) { // calculate length in objectLength as soon as the stick has passed the sensor
-			printf("The counter was %d\n", detectorCounter);
 
 			double objectLength = detectorCounter * 0.002 * belt_ref_ms * 100;
 
@@ -275,7 +274,12 @@ int main()
 	while ((input = rl_gets("ShuteController> "))) {
 
 		if (strcmp(input, "help") == 0) {
-			puts("Who needs that?\n");
+			puts("The following commands are implemented:");
+			puts("	start       - Starts the controller");
+			puts("	stop        - Stop the controller");
+			puts("	shuteRef    - Update the shute references to match box positions");
+			puts("	beltRef     - Change the speed of the conveyor belt");
+			puts("	quit | exit - Close the program");
 		}
 
 		else if (strcmp(input, "start") == 0) {
@@ -306,16 +310,6 @@ int main()
 			break;
 		}
 
-		else if (strcmp(input, "read") == 0) {
-			comedi_t * hw = comedi_open("/dev/comedi2");
-
-			unsigned int data;
-			comedi_data_read_delayed(hw, 0, 1, 0, AREF_DIFF, &data, 50000);
-			printf("The reading was %d\n", data);
-
-			comedi_close(hw);
-		}
-
 		else if (strcmp(input, "beltRef") == 0) {
 			printf("Type a new reference speed for the belt in [m/s]\n");
 			scanf("%lf", &belt_ref_ms);
@@ -337,19 +331,19 @@ int main()
 			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 			firstBoxRef = data;
 
-			printf("A value of %d was saved!", data);
+			printf("A value of %d was saved!\n", data);
 			printf("Set the shute in the position for the second box and press enter...\n");
 			getchar();
 			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 			secondBoxRef = data;
 
-			printf("A value of %d was saved!", data);
+			printf("A value of %d was saved!\n", data);
 			printf("Set the shute in the position for the third box and press enter...\n");
 			getchar();
 			comedi_data_read_delayed(hw, 0, 0, 0, AREF_DIFF, &data, 50000);
 			thirdBoxRef = data;
 
-			printf("A value of %d was saved!", data);
+			printf("A value of %d was saved!\n", data);
 			printf("New calibration was saved\n");
 		}
 
